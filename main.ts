@@ -54,8 +54,31 @@ export default class TodoistLinkPlugin extends Plugin {
 				this.updateObsidianTaskForCurrentLine(view)
 			}
 		});
+		this.addCommand({
+			id: 'update-todoist-task-for-file',
+			name: 'Update Todoist Task For File',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				this.updateObsidianTasksForFile(view)
+			}
+		})
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new TodoistLinkSettingTab(this.app, this));
+	}
+
+	updateObsidianTasksForFile(view: MarkdownView) {
+		const lineCount = view.editor.lineCount()
+		for (let line = 0; line < lineCount; line++) {
+			if (this.isLineATask(line, view)) {
+				this.updateObsidianTask(line, view)
+			}
+		}
+	}
+
+	isLineATask(line: number, view: MarkdownView): boolean {
+		const lineText = view.editor.getLine(line)
+		const trimmedLineText = lineText.trim()
+		const isTask = trimmedLineText.startsWith("- [ ]") || trimmedLineText.startsWith("- [x]")
+		return isTask
 	}
 
 	onunload() {
@@ -63,24 +86,26 @@ export default class TodoistLinkPlugin extends Plugin {
 
 	updateObsidianTaskForCurrentLine(view: MarkdownView) {
 		const lineNumber = view.editor.getCursor().line
-		this.updateObsidianTask(lineNumber, view)
+		this.updateObsidianTask(lineNumber, view).then(() => {
+			view.editor.setCursor(lineNumber, view.editor.getLine(lineNumber).length);
+		})
 	}
 
-	updateObsidianTask(lineNumber: number, view: MarkdownView) {
+	async updateObsidianTask(lineNumber: number, view: MarkdownView) {
 		const fileName = view.file.name
 		const obsidianLineText = view.editor.getLine(lineNumber)
 		const trimedObsidianLineText = obsidianLineText.trim()
 		const trimedFileName = fileName.replace(/\.md$/, "")
 		let obsidianTask = new ObsidianTask(trimedObsidianLineText, null, null, trimedFileName)
 		let todoistTaskHandler = this.getTodoistTaskHandler()
-		todoistTaskHandler.syncObsidianTaskWithTodoist(obsidianTask).then(
-			(task) => {this.updateObsidianLine(lineNumber, task.getObsidianString(), view);}
+		await todoistTaskHandler.syncObsidianTaskWithTodoist(obsidianTask).then(
+			(task) => {this.updateObsidianLineText(lineNumber, task.getObsidianString(), view);}
 		).catch((error) => console.log(error));
 	}
 
-	updateObsidianLine(lineNumber: number, newText: string, view: MarkdownView) {
+	updateObsidianLineText(lineNumber: number, newText: string, view: MarkdownView) {
 		const obsidianLineText = view.editor.getLine(lineNumber)
-		const firstLetterIndex = obsidianLineText.search(/[a-zA-Z\\[]|[0-9]/);
+		const firstLetterIndex = 0;
 		const lastLetterIndex = obsidianLineText.length;
 		const startRange: EditorPosition = {
 			line: lineNumber,
