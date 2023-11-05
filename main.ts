@@ -1,23 +1,13 @@
 import { Editor, App, EditorPosition, MarkdownView, Plugin, HeadingCache, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { TodoistApi } from '@doist/todoist-api-typescript'
-import { findWikiLink, line } from './utility';
+import { ObsidianTask, TodoistTaskHandler } from './task';
 
 interface TodoistLinkSettings {
-	transformToLink: boolean;
 	apikey: string;
 }
 
 const DEFAULT_SETTINGS: TodoistLinkSettings = {
 	apikey: '', 
-	transformToLink: false,
-}
-
-function getCurrentLine(editor: Editor, view: MarkdownView) {
-	const lineNumber = editor.getCursor().line
-	const lineText = editor.getLine(lineNumber)
-	return {
-		lineText, lineNumber
-	}
 }
 
 // https://github.com/mgmeyers/obsidian-copy-block-link/blob/9f9ce83ecabeda03528fe3efddbd2d766d280821/main.ts#L120
@@ -32,100 +22,6 @@ export function findPreviousHeader(line: number, headers: HeadingCache[]): strin
     return headers[index].heading;
 }
 
-
-function prepareTask(line: string, app: any, activeFile: TFile): line {
-	
-	line = line.trim()
-	//remove all leading non-alphanumeric characters
-	let lineExternalLinkFormat = line
-	lineExternalLinkFormat = lineExternalLinkFormat.replace(/^[^\\[a-zA-Z0-9]+|[^\\[a-zA-Z0-9]+$/, '')
-	// replace wiki links with obisidian links
-	const wikilinks = findWikiLink(lineExternalLinkFormat)
-	wikilinks.forEach(wikilink => {
-		const link = this.app.metadataCache.getFirstLinkpathDest(wikilink.text, activeFile.path)
-		if (link) {
-			const urlForWikiLink = app.getObsidianUrl(link)
-			lineExternalLinkFormat = lineExternalLinkFormat.replace(wikilink.link, `[${wikilink.text}](${urlForWikiLink})`)
-		}
-	})
-	const lineInternalLinkFormat = line.replace(/^[^\\[a-zA-Z0-9]+|[^\\[a-zA-Z0-9]+$/, '')
-	//lineInternalLinkFormat = lineInternalLinkFormat.replace(/\[\[([^\]]+)\]\]/g, '[$1]($1)')
-	
-	return {
-		externalLinkFormat: lineExternalLinkFormat,
-		internalLinkFormat: lineInternalLinkFormat,
-		wikilinks
-	}
-}
-
-
-function createProject(title: string, deepLink: string, api: TodoistApi) {
-	api.addProject({ name: title })
-    .then((project) => {
-		api.addComment({
-			projectId: project.id,
-			content: `[${title}](${deepLink})`,
-		}).catch((error) => console.log(error))
-		const workspace = this.app.workspace;
-			const view = workspace.getActiveViewOfType(MarkdownView);
-			if (view == null) {
-				return;
-			} else {
-				//const editor = view.editor
-
-				const editor = view.editor
-				const todoistLink = project.url;
-				const editorPosition = view.editor.getCursor()
-				const lineLength = view.editor.getLine(editorPosition.line).length
-				const endRange: EditorPosition = {
-					line: editorPosition.line,
-					ch: lineLength
-				}
-				editor.replaceRange(`[Todoist](${todoistLink})\n\n`, endRange, endRange);
-			}
-	})
-    .catch((error) => console.log(error))
-}
-
-export function createTask(processedLine: line, deepLink: string, api: TodoistApi, transformToLink: boolean, fileName: string) {
-	console.log(processedLine)
-	api.addTask({
-		content: `${processedLine.externalLinkFormat}`,
-		description: `[${fileName}](${deepLink})`,
-	}).then(
-		(task) => {
-			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			if (view == null) {
-				return;
-			} else {
-				const editor = view.editor
-				const currentLine = getCurrentLine(editor, view)
-				const firstLetterIndex = currentLine.lineText.search(/[a-zA-Z\\[]|[0-9]/);
-				const editorPosition = view.editor.getCursor()
-				const lineLength = view.editor.getLine(editorPosition.line).length
-				const startRange: EditorPosition = {
-					line: editorPosition.line,
-					ch: firstLetterIndex
-				}
-				const endRange: EditorPosition = {
-					line: editorPosition.line,
-					ch: lineLength
-				}
-				if (transformToLink) {
-					view.editor.replaceRange(`[${processedLine.internalLinkFormat}](${task.url})`, startRange, endRange);
-				} else {
-					view.editor.replaceRange(` ([Todoist](${task.url}))`, endRange, endRange);
-				}
-				
-			}
-		})
-	.catch((error) => console.log(error))
-}
-
-export function containsWikiLink(line: string): boolean {
-	return line.includes('[[')
-}
-
 export default class TodoistLinkPlugin extends Plugin {
 
 	settings: TodoistLinkSettings;
@@ -135,63 +31,72 @@ export default class TodoistLinkPlugin extends Plugin {
 		return api
 	}
 
+	getTodoistTaskHandler(): TodoistTaskHandler {
+		const api = this.getTodistApi();
+		const handler = new TodoistTaskHandler(api);
+		return handler
+	}
+
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-		//this.onload();
 	}
 
 	async onload() {
-
 		await this.loadSettings();
-
 		this.addCommand({
-			id: 'create-todoist-project',
-			name: 'Create Todoist Project',
+			id: 'update-todoist-task',
+			name: 'Update Todoist Task',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				const workspace = this.app.workspace;
-				const fileTitle = workspace.getActiveFile()
-				if (fileTitle == null) {
-					return;
-				} else {
-					let fileName = fileTitle.name
-					fileName = fileName.replace(/\.md$/, '')
-					const obsidianDeepLink = (this.app as any).getObsidianUrl(fileTitle)		
-					createProject(fileName, obsidianDeepLink, this.getTodistApi())
-				}
+				this.updateObsidianTaskForCurrentLine(view)
 			}
 		});
-	
-		this.addCommand({
-			id: 'create-todoist-task',
-			name: 'Create Todoist Task',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				const workspace = this.app.workspace;
-				const activeFile = workspace.getActiveFile()
-				if (activeFile == null) {
-					return;
-				} else {
-					let fileName = activeFile.name
-          			fileName = fileName.replace(/\.md$/, "")
-          			const obsidianDeepLink = (this.app as any).getObsidianUrl(activeFile)
-					const line = getCurrentLine(editor, view)
-					const task = prepareTask(line.lineText, this.app, activeFile)
-					createTask(task, obsidianDeepLink, this.getTodistApi(), this.settings.transformToLink, fileName)
-				}
-			}
-		});
-
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new TodoistLinkSettingTab(this.app, this));
-
 	}
+
 	onunload() {
-
 	}
 
+	updateObsidianTaskForCurrentLine(view: MarkdownView) {
+		const lineNumber = view.editor.getCursor().line
+		this.updateObsidianTask(lineNumber, view)
+	}
+
+	updateObsidianTask(lineNumber: number, view: MarkdownView) {
+		const fileName = view.file.name
+		const obsidianLineText = view.editor.getLine(lineNumber)
+		const trimedObsidianLineText = obsidianLineText.trim()
+		const trimedFileName = fileName.replace(/\.md$/, "")
+		let obsidianTask = new ObsidianTask(trimedObsidianLineText, null, null, trimedFileName)
+		let todoistTaskHandler = this.getTodoistTaskHandler()
+		todoistTaskHandler.syncObsidianTaskWithTodoist(obsidianTask).then(
+			(task) => {this.updateObsidianLine(lineNumber, task.getObsidianString(), view);}
+		).catch((error) => console.log(error));
+	}
+
+	updateObsidianLine(lineNumber: number, newText: string, view: MarkdownView) {
+		const obsidianLineText = view.editor.getLine(lineNumber)
+		const firstLetterIndex = obsidianLineText.search(/[a-zA-Z\\[]|[0-9]/);
+		const lastLetterIndex = obsidianLineText.length;
+		const startRange: EditorPosition = {
+			line: lineNumber,
+			ch: firstLetterIndex
+		}
+		const endRange: EditorPosition = {
+			line: lineNumber,
+			ch: lastLetterIndex
+		}
+		console.log("New text is: " + newText)
+		console.log("First letter index is: " + firstLetterIndex)
+		console.log("Last letter index is: " + lastLetterIndex)
+		console.log("Old text is: " + obsidianLineText)
+		console.log("Line number is: " + lineNumber)
+		view.editor.replaceRange(newText, startRange, endRange);
+	}
 	
 }
 
@@ -224,17 +129,5 @@ class TodoistLinkSettingTab extends PluginSettingTab {
 				}));
 
 		this.containerEl.createEl('h2', { text: 'General' })
-
-		new Setting(containerEl)
-			.setName('Style: Transform Link to Link')
-			.setDesc('If you enable this setting then then plugin transforms the complete line to a link to Todoist.')
-			.addToggle( (toggle) => {
-				toggle
-				.setValue(this.plugin.settings.transformToLink)
-				.onChange(async (value) => {
-					this.plugin.settings.transformToLink = value;
-					await this.plugin.saveSettings();
-				})
-			});
 	}
 }
