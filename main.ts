@@ -1,6 +1,6 @@
 import { Editor, App, EditorPosition, MarkdownView, Plugin, HeadingCache, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { TodoistApi } from '@doist/todoist-api-typescript'
-import { ObsidianTask, TodoistTaskHandler } from './task';
+import { ObsidianTask, ObsidianTaskFactory, TodoistTaskHandler } from './task';
 
 interface TodoistLinkSettings {
 	apikey: string;
@@ -77,8 +77,15 @@ export default class TodoistLinkPlugin extends Plugin {
 	isLineATask(line: number, view: MarkdownView): boolean {
 		const lineText = view.editor.getLine(line)
 		const trimmedLineText = lineText.trim()
-		const isTask = trimmedLineText.startsWith("- [ ]") || trimmedLineText.startsWith("- [x]")
-		return isTask
+		if (trimmedLineText.startsWith("- [ ]") || trimmedLineText.startsWith("- [x]")) {
+			return true
+		}
+		let urlRegex = /https:\/\/app\.todoist\.com\/app\/task\/\D*(\d+)/;
+        let urlMatch = urlRegex.exec(trimmedLineText);
+		if (urlMatch) {
+			return true
+		}
+		return false
 	}
 
 	onunload() {
@@ -96,7 +103,7 @@ export default class TodoistLinkPlugin extends Plugin {
 		const obsidianLineText = view.editor.getLine(lineNumber)
 		const trimedObsidianLineText = obsidianLineText.trim()
 		const trimedFileName = fileName.replace(/\.md$/, "")
-		let obsidianTask = new ObsidianTask(trimedObsidianLineText, null, null, trimedFileName)
+		let obsidianTask = ObsidianTaskFactory.createObsidianTask(trimedObsidianLineText, trimedFileName)
 		let todoistTaskHandler = this.getTodoistTaskHandler()
 		await todoistTaskHandler.syncObsidianTaskWithTodoist(obsidianTask).then(
 			(task) => {this.updateObsidianLineText(lineNumber, task.getObsidianString(), view);}

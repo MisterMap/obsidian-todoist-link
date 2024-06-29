@@ -19,6 +19,7 @@ task.js
 
 # obsidian
 data.json
+data_test_todoist.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

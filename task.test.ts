@@ -1,17 +1,18 @@
-import { ObsidianTask } from './task';
+import { ObsidianTask, ObsidianTaskFactory } from './task';
 
 test('test task constructor', () => {
-    expect(new ObsidianTask("Do this.  [[Task]]")).toMatchObject({
+    expect(new ObsidianTask("Do this.  [[Task]]", false, null, null, null)).toMatchObject({
         summary: "Do this.  [[Task]]",
         completed: false,
-        id: null
+        id: null,
+        projectName: null,
+        description: null,
     });
-
 })
 
 
 test('test task constructor completed = false', () => {
-    expect(new ObsidianTask("- [ ] Do this.  [[Task]]")).toMatchObject({
+    expect(ObsidianTaskFactory.createObsidianTask("- [ ] Do this.  [[Task]]")).toMatchObject({
         summary: "Do this.  [[Task]]",
         completed: false,
         id: null,
@@ -19,7 +20,7 @@ test('test task constructor completed = false', () => {
 })
 
 test('test task constructor completed = true', () => {
-    expect(new ObsidianTask("- [x] Do this.  [[Task]]")).toMatchObject({
+    expect(ObsidianTaskFactory.createObsidianTask("- [x] Do this.  [[Task]]")).toMatchObject({
         summary: "Do this.  [[Task]]",
         completed: true,
         id: null,
@@ -27,11 +28,10 @@ test('test task constructor completed = true', () => {
 })
 
 test('test task constructor completed = id', () => {
-    expect(new ObsidianTask("- [x] Implement the EGGS algorithm using the modified heuristic function ([Todoist](https://todoist.com/showTask?id=6802270236))")).toMatchObject({
+    expect(ObsidianTaskFactory.createObsidianTask("- [x] Implement the EGGS algorithm using the modified heuristic function ([Todoist](https://todoist.com/showTask?id=6802270236))")).toMatchObject({
         summary: "Implement the EGGS algorithm using the modified heuristic function",
         completed: true,
         id: "6802270236",
-        projectName: null,
     });
 })
 
@@ -57,16 +57,31 @@ test('test task constructor completed different parameters null id', () => {
     expect(new ObsidianTask("Do task", false)).toMatchObject({
         summary: "Do task",
         completed: false,
-        id: null,
     });
 })
 
+test('test task constructor from todoist link', () => {
+    expect(ObsidianTaskFactory.createObsidianTask("some text https://app.todoist.com/app/task/sdelat-follow-up-po-vstreche-po-vmeshatelstvam-7522900525")).toMatchObject({
+        summary: "some text https://app.todoist.com/app/task/sdelat-follow-up-po-vstreche-po-vmeshatelstvam-7522900525",
+        completed: false,
+        id: "7522900525",
+    });
+})
 
-test('test get obsidian string', () => {
-    expect((new ObsidianTask("- [x] Do this.  [[Task]]")).getObsidianString()).toMatch("- [x] Do this.  [[Task]]");
+test('test task constructor from only todoist link', () => {
+    expect(ObsidianTaskFactory.createObsidianTask("https://app.todoist.com/app/task/sdelat-follow-up-po-vstreche-po-vmeshatelstvam-7522900525")).toMatchObject({
+        summary: "https://app.todoist.com/app/task/sdelat-follow-up-po-vstreche-po-vmeshatelstvam-7522900525",
+        completed: false,
+        id: "7522900525",
+    });
 })
 
 test('test get obsidian string', () => {
-    expect((new ObsidianTask("- [x] Implement the EGGS algorithm using the modified heuristic function ([Todoist](https://todoist.com/showTask?id=6802270236))")).getObsidianString()).toMatch(
+    expect((new ObsidianTask("- [x] Do this.  [[Task]]", false)).getObsidianString()).toMatch("- [x] Do this.  [[Task]]");
+})
+
+test('test get obsidian string', () => {
+    expect((ObsidianTaskFactory.createObsidianTask("- [x] Implement the EGGS algorithm using the modified heuristic function ([Todoist](https://todoist.com/showTask?id=6802270236))")).getObsidianString()).toMatch(
         "- [x] Implement the EGGS algorithm using the modified heuristic function ([Todoist](https://todoist.com/showTask?id=6802270236))");
 })
+

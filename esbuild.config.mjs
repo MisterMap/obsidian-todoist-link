@@ -44,7 +44,7 @@ esbuild.build({
 		...builtins],
 	format: 'cjs',
 	watch: !prod,
-	target: 'es2016',
+	target: 'es2019',
 	logLevel: "info",
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
