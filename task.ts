@@ -131,7 +131,7 @@ export class TodoistTaskHandler {
     }
 
     parseTodoistTaskDescription(description: string): string {
-        let regex = /(?:\*\*(.*)\*\*\n)?(.*)/;
+        let regex = /(?:\*\*(.*)\*\*)?\n?(.*)/;
         let match = regex.exec(description);
         if (match) {
             return match[2];
